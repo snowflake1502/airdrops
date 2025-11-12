@@ -26,6 +26,11 @@ export async function POST(request: NextRequest) {
 
     if (!response.ok) {
       const errorText = await response.text()
+      console.error(`❌ Meteora API error for position ${positionAddress}:`, {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText
+      })
       throw new Error(`Meteora API returned ${response.status}: ${errorText}`)
     }
 
@@ -46,6 +51,17 @@ export async function POST(request: NextRequest) {
     const tokenYDecimals = pairData.mint_y_decimals || 6
     const tokenXSymbol = pairData.name?.split('-')[0] || 'Unknown'
     const tokenYSymbol = pairData.name?.split('-')[1] || 'Unknown'
+
+    // USDC mint address
+    const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+    // SOL mint address (wrapped SOL)
+    const SOL_MINT = 'So11111111111111111111111111111111111111112'
+
+    // Determine which token is which based on mint address
+    const isTokenXUSDC = tokenX === USDC_MINT
+    const isTokenXSOL = tokenX === SOL_MINT
+    const isTokenYUSDC = tokenY === USDC_MINT
+    const isTokenYSOL = tokenY === SOL_MINT
 
     // Fetch position details from user_positions endpoint using owner wallet
     let tokenXAmount = 0
@@ -79,9 +95,37 @@ export async function POST(request: NextRequest) {
       // Continue with 0 amounts if we can't fetch
     }
 
-    // Use prices from pair data
-    const tokenXPrice = Number(pairData.current_price || 186)
-    const tokenYPrice = 1 // USDC is always $1
+    // Determine prices based on actual token types (not position order)
+    let tokenXPrice = 1 // Default
+    let tokenYPrice = 1 // Default
+    
+    if (isTokenXUSDC) {
+      tokenXPrice = 1 // USDC is always $1
+    } else if (isTokenXSOL) {
+      tokenXPrice = Number(pairData.current_price || 186) // SOL price from pair data
+    } else {
+      // Fallback: use current_price if tokenX is not USDC/SOL
+      tokenXPrice = Number(pairData.current_price || 186)
+    }
+    
+    if (isTokenYUSDC) {
+      tokenYPrice = 1 // USDC is always $1
+    } else if (isTokenYSOL) {
+      tokenYPrice = Number(pairData.current_price || 186) // SOL price from pair data
+    } else {
+      // Fallback: use current_price if tokenY is not USDC/SOL
+      tokenYPrice = Number(pairData.current_price || 186)
+    }
+    
+    // If we couldn't determine from mint addresses, try to infer from symbol
+    if (tokenXPrice === 1 && tokenYPrice === 1 && pairData.current_price) {
+      // Both are $1, which is wrong. Use current_price for the non-USDC token
+      if (tokenXSymbol.toUpperCase() === 'USDC') {
+        tokenYPrice = Number(pairData.current_price || 186)
+      } else if (tokenYSymbol.toUpperCase() === 'USDC') {
+        tokenXPrice = Number(pairData.current_price || 186)
+      }
+    }
 
     const totalValueUSD = (tokenXAmount * tokenXPrice) + (tokenYAmount * tokenYPrice)
     const unclaimedFeesUSD = (unclaimedFeeX * tokenXPrice) + (unclaimedFeeY * tokenYPrice)

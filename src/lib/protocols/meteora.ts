@@ -153,7 +153,7 @@ export class MeteoraService extends ProtocolService {
         protocol: 'Meteora',
         activityType: 'swap',
         name: 'Swap on Meteora',
-        description: 'Execute token swaps directly on Meteora DEX',
+        description: 'Execute token swaps directly on Meteora DEX. Swaps are automatically tracked on-chain for airdrop eligibility.',
         pointsValue: 15,
         automationLevel: 'full',
         estimatedTime: '1-2 minutes',

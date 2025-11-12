@@ -1,9 +1,25 @@
 import { createClient } from '@supabase/supabase-js'
 
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://mcakqykdtxlythsutgpx.supabase.co'
-const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1jYWtxeWtkdHhseXRoc3V0Z3B4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyNTMyNTUsImV4cCI6MjA3NTgyOTI1NX0.Nbb4oQKKQaTTe46vjTHPNTxDnqxZL4X5MswbyZD2xjY'
+// SECURITY: Use environment variables (Supabase anon key is safe to expose, but use env vars for flexibility)
+// Note: Supabase anon keys are designed to be public (client-side safe), but we use env vars for best practices
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+// Use fallback values only in development if env vars not set (for graceful degradation)
+// SECURITY: These are Supabase anon keys (public-safe), but should use env vars in production
+// In Vercel/production, env vars will be set via dashboard, so fallbacks won't be used
+const isDevelopment = process.env.NODE_ENV !== 'production'
+const finalSupabaseUrl = supabaseUrl || (isDevelopment ? 'https://mcakqykdtxlythsutgpx.supabase.co' : '')
+const finalSupabaseKey = supabaseAnonKey || (isDevelopment ? 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1jYWtxeWtkdHhseXRoc3V0Z3B4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjAyNTMyNTUsImV4cCI6MjA3NTgyOTI1NX0.Nbb4oQKKQaTTe46vjTHPNTxDnqxZL4X5MswbyZD2xjY' : '')
+
+// Only throw error if both env vars AND fallbacks are missing (should never happen in dev)
+if (!finalSupabaseUrl || !finalSupabaseKey) {
+  throw new Error(
+    'Missing Supabase environment variables. Please set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY in your environment variables.'
+  )
+}
+
+export const supabase = createClient(finalSupabaseUrl, finalSupabaseKey, {
   auth: {
     autoRefreshToken: true,
     persistSession: true,

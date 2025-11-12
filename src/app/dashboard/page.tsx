@@ -317,7 +317,18 @@ export default function DashboardPage() {
       if (error?.message?.includes('403') || error?.message?.includes('401')) {
         console.error('❌ RPC authentication error (403/401)')
         console.error('Current RPC endpoint:', connection.rpcEndpoint)
-        console.error('Check NEXT_PUBLIC_SOLANA_RPC_URL in .env.local')
+        console.error('Expected Helius RPC but got:', connection.rpcEndpoint.includes('helius') ? 'Helius (but 403)' : 'Public RPC (no Helius key)')
+        console.error('Check NEXT_PUBLIC_SOLANA_RPC_URL in .env.local and next.config.ts')
+        
+        // Show what env vars are available
+        if (typeof window !== 'undefined') {
+          const nextData = (window as any).__NEXT_DATA__;
+          console.error('Available env vars:', {
+            hasRpcUrl: !!nextData?.env?.NEXT_PUBLIC_SOLANA_RPC_URL,
+            rpcUrlPreview: nextData?.env?.NEXT_PUBLIC_SOLANA_RPC_URL ? 
+              nextData.env.NEXT_PUBLIC_SOLANA_RPC_URL.substring(0, 60) + '...' : 'NOT FOUND'
+          });
+        }
       }
       setWalletBalance(0)
       setUsdcBalance(0)

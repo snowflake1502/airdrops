@@ -22,7 +22,16 @@ export const WalletContextProvider: FC<WalletContextProviderProps> = ({ children
   // Use a more reliable public RPC endpoint
   const endpoint = useMemo(() => {
     // Use the centralized env config helper
-    return getRpcUrl()
+    const url = getRpcUrl()
+    // Debug: Log which RPC is being used
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('🔗 WalletProvider RPC:', {
+        url: url.substring(0, 60) + '...',
+        isHelius: url.includes('helius'),
+        isPublic: url === 'https://api.mainnet-beta.solana.com'
+      })
+    }
+    return url
   }, [network])
 
   const wallets = useMemo(
