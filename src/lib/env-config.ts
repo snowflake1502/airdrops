@@ -100,28 +100,22 @@ export function getRpcUrl(): string {
     rpcUrl = 'https://api.mainnet-beta.solana.com';
   }
   
-  // Debug logging (development only) - after fallback is set
-  if (typeof window !== 'undefined' && process.env.NODE_ENV !== 'production') {
-    const hasHelius = rpcUrl.includes('helius');
-    const isPublic = rpcUrl === 'https://api.mainnet-beta.solana.com' || !rpcUrl;
-    
-    console.log('🔗 RPC URL Debug:', {
-      found: !!rpcUrl,
-      url: rpcUrl ? rpcUrl.substring(0, 60) + '...' : 'NOT FOUND',
-      isHelius: hasHelius,
-      isPublic: isPublic,
-      sources: {
-        getEnvVar: !!getEnvVar('NEXT_PUBLIC_SOLANA_RPC_URL'),
-        processEnv: !!(typeof process !== 'undefined' && process.env?.NEXT_PUBLIC_SOLANA_RPC_URL),
-        windowNextData: !!(typeof window !== 'undefined' && (window as any).__NEXT_DATA__?.env?.NEXT_PUBLIC_SOLANA_RPC_URL)
+  // Debug logging (development only, once per session) - after fallback is set
+  if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    // Only log once per session to reduce console noise
+    const logKey = '__rpc_url_logged__';
+    if (!(window as any)[logKey]) {
+      const hasHelius = rpcUrl.includes('helius');
+      const isPublic = rpcUrl === 'https://api.mainnet-beta.solana.com' || !rpcUrl;
+      
+      if (isPublic) {
+        console.warn('⚠️ Using public Solana RPC (rate limited). Helius key not found.');
+        console.warn('   Check: next.config.ts env section and .env.local file');
+      } else if (hasHelius) {
+        console.log('✅ Using Helius RPC');
       }
-    });
-    
-    if (isPublic) {
-      console.warn('⚠️ Using public Solana RPC (rate limited). Helius key not found.');
-      console.warn('   Check: next.config.ts env section and .env.local file');
-    } else if (hasHelius) {
-      console.log('✅ Using Helius RPC');
+      
+      (window as any)[logKey] = true;
     }
   }
   

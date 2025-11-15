@@ -9,6 +9,7 @@ import WalletManager from '@/components/WalletManager'
 import { protocolManager } from '@/lib/protocols'
 import { AutomationLog, AutomationApproval } from '@/lib/automation/types'
 import { useWallet } from '@solana/wallet-adapter-react'
+import { useExecuteAction } from '@/lib/automation/use-execute-action'
 
 interface Recommendation {
   id: string
@@ -43,6 +44,7 @@ export default function ActivitiesPage() {
   const [automationStatus, setAutomationStatus] = useState<any[]>([])
   const router = useRouter()
   const { publicKey, connected } = useWallet()
+  const { executeAction, isExecuting, error: executeError, canExecute } = useExecuteAction()
 
   useEffect(() => {
     const checkUser = async () => {
@@ -811,6 +813,18 @@ export default function ActivitiesPage() {
                   </div>
                 </div>
               ) : automationLogs.length > 0 ? (
+                <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <p className="text-sm text-blue-800">
+                    💡 <strong>Tip:</strong> Execute buttons appear for pending actions. Connect your wallet to execute transactions.
+                    {!connected && (
+                      <span className="block mt-1 text-xs text-blue-600">
+                        ⚠️ Wallet not connected. Connect your wallet to see Execute buttons.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              ) : null}
+              {automationLogs.length > 0 ? (
                 <div className="bg-white rounded-lg shadow overflow-hidden">
                   <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -830,10 +844,25 @@ export default function ActivitiesPage() {
                         <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                           Details
                         </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                          Actions
+                        </th>
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {automationLogs.map((log) => (
+                      {automationLogs.map((log) => {
+                        // Debug: Log each log to see its status
+                        if (process.env.NODE_ENV === 'development') {
+                          console.log('Automation log:', {
+                            id: log.id,
+                            status: log.status,
+                            actionType: log.action_type,
+                            hasTransaction: !!log.transaction_signature,
+                            metadata: log.metadata,
+                            canShowExecute: (log.status === 'pending' || log.status === 'approved') && !log.transaction_signature
+                          })
+                        }
+                        return (
                         <tr key={log.id}>
                           <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                             {new Date(log.created_at).toLocaleString()}
@@ -873,8 +902,65 @@ export default function ActivitiesPage() {
                               <span>{log.metadata?.reason || '-'}</span>
                             )}
                           </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm">
+                            {(log.status === 'pending' || log.status === 'approved') && !log.transaction_signature ? (
+                              <button
+                                onClick={async () => {
+                                  if (!canExecute) {
+                                    alert('Please connect your wallet first to execute this action.')
+                                    return
+                                  }
+                                  const result = await executeAction(log.id)
+                                  if (result.success) {
+                                    alert(`Transaction executed successfully!\nSignature: ${result.signature}\n\nView on Solscan: https://solscan.io/tx/${result.signature}`)
+                                    // Reload automation logs
+                                    if (selectedWallet) {
+                                      await loadAutomationData(selectedWallet)
+                                    }
+                                  } else {
+                                    alert(`Failed to execute: ${result.error}`)
+                                  }
+                                }}
+                                disabled={isExecuting || !canExecute}
+                                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                                  isExecuting || !canExecute
+                                    ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                    : 'bg-green-600 text-white hover:bg-green-700 shadow-sm'
+                                }`}
+                                title={!canExecute ? 'Connect your wallet to execute' : 'Execute this action'}
+                              >
+                                {isExecuting ? '⏳ Executing...' : '▶ Execute'}
+                              </button>
+                            ) : log.status === 'executed' && log.transaction_signature ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-green-600 font-medium">✓ Executed</span>
+                                <a
+                                  href={`https://solscan.io/tx/${log.transaction_signature}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-indigo-600 hover:text-indigo-800 underline"
+                                >
+                                  View Tx
+                                </a>
+                              </div>
+                            ) : log.status === 'failed' ? (
+                              <div className="flex flex-col gap-1">
+                                <span className="text-xs text-red-600 font-medium">✗ Failed</span>
+                                {log.error_message && (
+                                  <span className="text-xs text-gray-500" title={log.error_message}>
+                                    {log.error_message.substring(0, 30)}...
+                                  </span>
+                                )}
+                              </div>
+                            ) : log.metadata?.requiresApproval ? (
+                              <span className="text-xs text-yellow-600 font-medium">⏳ Approval Required</span>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </td>
                         </tr>
-                      ))}
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1434,8 +1520,73 @@ export default function ActivitiesPage() {
                             </div>
                             <div className="space-y-1 text-xs">
                               {status.feeClaim.canClaim ? (
-                                <div className="text-green-600 font-medium">
-                                  ✅ Ready to execute - ${status.feeClaim.current.toFixed(2)} meets ${status.feeClaim.threshold.toFixed(2)} threshold
+                                <div className="space-y-2">
+                                  <div className="text-green-600 font-medium">
+                                    ✅ Ready to execute - ${status.feeClaim.current.toFixed(2)} meets ${status.feeClaim.threshold.toFixed(2)} threshold
+                                  </div>
+                                  <button
+                                    onClick={async () => {
+                                      if (!canExecute) {
+                                        alert('Please connect your wallet first to execute fee claim.')
+                                        return
+                                      }
+                                      
+                                      // Find the pending fee claim log for this position
+                                      const claimLog = automationLogs.find(
+                                        log => 
+                                          log.action_type === 'claim_fees' &&
+                                          log.status === 'pending' &&
+                                          log.position_nft_address === status.position.nftAddress &&
+                                          !log.transaction_signature
+                                      )
+                                      
+                                      if (!claimLog) {
+                                        // If no log exists, run automation to create one, then execute
+                                        alert('No pending fee claim log found. Running automation to create one...')
+                                        await runAutomation()
+                                        // Wait a moment for log to be created
+                                        setTimeout(async () => {
+                                          await loadAutomationData(selectedWallet)
+                                          const newLog = automationLogs.find(
+                                            log => 
+                                              log.action_type === 'claim_fees' &&
+                                              log.status === 'pending' &&
+                                              log.position_nft_address === status.position.nftAddress
+                                          )
+                                          if (newLog) {
+                                            const result = await executeAction(newLog.id)
+                                            if (result.success) {
+                                              alert(`Fee claim executed successfully!\nSignature: ${result.signature}`)
+                                              await loadAutomationData(selectedWallet)
+                                            } else {
+                                              alert(`Failed to execute: ${result.error}`)
+                                            }
+                                          } else {
+                                            alert('Please check the Automation Activity tab for the fee claim log.')
+                                            setActiveTab('automation')
+                                          }
+                                        }, 2000)
+                                        return
+                                      }
+                                      
+                                      // Execute the found log
+                                      const result = await executeAction(claimLog.id)
+                                      if (result.success) {
+                                        alert(`Fee claim executed successfully!\nSignature: ${result.signature}\n\nView on Solscan: https://solscan.io/tx/${result.signature}`)
+                                        await loadAutomationData(selectedWallet)
+                                      } else {
+                                        alert(`Failed to execute fee claim: ${result.error}`)
+                                      }
+                                    }}
+                                    disabled={isExecuting || !canExecute}
+                                    className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                      isExecuting || !canExecute
+                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                        : 'bg-green-600 text-white hover:bg-green-700'
+                                    }`}
+                                  >
+                                    {isExecuting ? '⏳ Executing...' : '▶ Execute Claim'}
+                                  </button>
                                 </div>
                               ) : status.feeClaim.onCooldown ? (
                                 <div className="text-blue-600">
@@ -1470,8 +1621,80 @@ export default function ActivitiesPage() {
                             </div>
                             <div className="space-y-1 text-xs">
                               {status.rebalance.pending ? (
-                                <div className="text-orange-600 font-medium">
-                                  ⚠️ Position out of range - rebalance will trigger automatically
+                                <div className="space-y-2">
+                                  <div className="text-orange-600 font-medium">
+                                    ⚠️ Position out of range - rebalance ready to execute
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      onClick={async () => {
+                                        if (!canExecute) {
+                                          alert('Please connect your wallet first to execute rebalance.')
+                                          return
+                                        }
+                                        
+                                        // Find the pending rebalance log for this position
+                                        const rebalanceLog = automationLogs.find(
+                                          log => 
+                                            log.action_type === 'rebalance' &&
+                                            log.status === 'pending' &&
+                                            log.position_nft_address === status.position.nftAddress &&
+                                            !log.transaction_signature
+                                        )
+                                        
+                                        if (!rebalanceLog) {
+                                          // If no log exists, run automation to create one, then execute
+                                          alert('No pending rebalance log found. Running automation to create one...')
+                                          await runAutomation()
+                                          // Wait a moment for log to be created
+                                          setTimeout(async () => {
+                                            await loadAutomationData(selectedWallet)
+                                            const newLog = automationLogs.find(
+                                              log => 
+                                                log.action_type === 'rebalance' &&
+                                                log.status === 'pending' &&
+                                                log.position_nft_address === status.position.nftAddress
+                                            )
+                                            if (newLog) {
+                                              const result = await executeAction(newLog.id)
+                                              if (result.success) {
+                                                alert(`Rebalance executed successfully!\nSignature: ${result.signature}`)
+                                                await loadAutomationData(selectedWallet)
+                                              } else {
+                                                alert(`Failed to execute: ${result.error}`)
+                                              }
+                                            } else {
+                                              alert('Please check the Automation Activity tab for the rebalance log.')
+                                              setActiveTab('automation')
+                                            }
+                                          }, 2000)
+                                          return
+                                        }
+                                        
+                                        // Execute the found log
+                                        const result = await executeAction(rebalanceLog.id)
+                                        if (result.success) {
+                                          alert(`Rebalance executed successfully!\nSignature: ${result.signature}\n\nView on Solscan: https://solscan.io/tx/${result.signature}`)
+                                          await loadAutomationData(selectedWallet)
+                                        } else {
+                                          alert(`Failed to execute rebalance: ${result.error}`)
+                                        }
+                                      }}
+                                      disabled={isExecuting || !canExecute}
+                                      className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                                        isExecuting || !canExecute
+                                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                          : 'bg-orange-600 text-white hover:bg-orange-700'
+                                      }`}
+                                    >
+                                      {isExecuting ? '⏳ Executing...' : '▶ Execute Rebalance'}
+                                    </button>
+                                    {!canExecute && (
+                                      <span className="text-gray-500 text-xs">
+                                        Connect wallet to execute
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               ) : (
                                 <div className="text-green-600">

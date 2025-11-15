@@ -1,0 +1,42 @@
+{
+  "name": "@airdrop-dashboard/crypto-protocol-mcp-server",
+  "version": "0.1.0",
+  "description": "MCP Server for crypto protocol integrations (Meteora, Jupiter, Sanctum, etc.)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "solana",
+    "crypto",
+    "defi",
+    "meteora",
+    "jupiter",
+    "sanctum"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^0.5.0",
+    "@meteora-ag/dlmm": "^1.0.0",
+    "@solana/web3.js": "^1.98.4",
+    "zod": "^3.22.4"
+  },
+  "peerDependencies": {
+    "@meteora-ag/dlmm": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3",
+    "vitest": "^1.2.0"
+  }
+}
+
